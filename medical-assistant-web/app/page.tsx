@@ -28,7 +28,7 @@ const ClinicalAssistant = () => {
   });
   const [clinicalFindings, setClinicalFindings] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [conversationId] = useState(() => `clinic_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`);
+  const [conversationId, setConversationId] = useState(() => `clinic_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`);
   const [symptoms, setSymptoms] = useState<string[]>([]);
   const [symptomInput, setSymptomInput] = useState('');
   const [patients, setPatients] = useState<Patient[]>([]);
@@ -38,6 +38,7 @@ const ClinicalAssistant = () => {
   const [statusFilter, setStatusFilter] = useState<'all' | 'Active' | 'Inactive'>('all');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [patientSummary, setPatientSummary] = useState<string>("");
 
   useEffect(() => {
     let mounted = true;
@@ -69,7 +70,19 @@ const ClinicalAssistant = () => {
 
   useEffect(() => {
     if (selectedPatient) {
+      setMessages([]);
+      setConversationId(`clinic_${selectedPatient.id}_${Date.now()}`);
       setPatientData(selectedPatient);
+      fetch(`http://localhost:8000/patient-summary/${selectedPatient.id}`)
+        .then(res => res.json())
+        .then(data => {
+          setPatientSummary(data.summary);
+          setMessages([{
+            type: 'assistant',
+            content: `I'm ready to discuss patient ${selectedPatient.name}. What would you like to know?`
+          }]);
+        })
+        .catch(err => console.error("Error fetching summary:", err));
     }
   }, [selectedPatient]);
 
@@ -77,7 +90,7 @@ const ClinicalAssistant = () => {
     if (!input.trim()) return;
     
     setIsLoading(true);
-    setMessages([...messages, { type: 'user', content: input }]);
+    setMessages(prev => [...prev, { type: 'user', content: input }]);
 
     try {
       const payload = {
@@ -97,8 +110,6 @@ const ClinicalAssistant = () => {
         conversation_id: conversationId
       };
       
-      console.log('Sending payload:', payload); // Debug log
-      
       const response = await fetch('http://localhost:8000/ask', {
         method: 'POST',
         headers: {
@@ -108,23 +119,13 @@ const ClinicalAssistant = () => {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        console.error('Error response:', errorData); // Debug log
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const data = await response.json();
-      console.log('Response data:', data);
-      
       setMessages(prev => [...prev, {
         type: 'assistant',
-        content: data.answer,
-        assessment: data.assessment,
-        recommendations: data.recommendations,
-        differential_diagnoses: data.differential_diagnoses,
-        references: data.references,
-        follow_up: data.follow_up_questions,
-        disclaimer: data.disclaimer
+        content: data.answer
       }]);
     } catch (error) {
       console.error('Error:', error);
@@ -402,19 +403,53 @@ const ClinicalAssistant = () => {
                   key={index}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="mb-4"
+                  className="mb-6"
                 >
                   {message.type === 'user' ? (
-                    <div className="bg-indigo-600 text-white p-4 rounded-xl ml-auto max-w-[80%]">
-                      {message.content}
+                    <div className="flex justify-end">
+                      <div className="bg-indigo-600 text-white p-4 rounded-2xl rounded-tr-none max-w-[80%] shadow-md">
+                        {message.content}
+                      </div>
                     </div>
                   ) : message.type === 'assistant' ? (
-                    <div className="bg-blue-100 text-blue-800 p-4 rounded-xl max-w-[80%] shadow-md">
-                      {message.content}
+                    <div className="flex justify-start">
+                      <div className="bg-white p-6 rounded-2xl rounded-tl-none max-w-[80%] shadow-lg border border-gray-100">
+                        {message.content.split('\n').map((line, i) => {
+                          if (line.startsWith('##')) {
+                            return (
+                              <h2 key={i} className="text-lg font-bold text-gray-800 mt-4 mb-2">
+                                {line.replace(/^##\s*/, '')}
+                              </h2>
+                            );
+                          } else if (line.startsWith('#')) {
+                            return (
+                              <h3 key={i} className="text-md font-semibold text-gray-700 mt-3 mb-2">
+                                {line.replace(/^#\s*/, '')}
+                              </h3>
+                            );
+                          } else if (line.trim().startsWith('-')) {
+                            return (
+                              <div key={i} className="flex gap-2 ml-4 my-1">
+                                <span>•</span>
+                                <span className="text-gray-700">{line.replace(/^-\s*/, '')}</span>
+                              </div>
+                            );
+                          } else if (line.trim()) {
+                            return (
+                              <p key={i} className="text-gray-700 my-2">
+                                {line}
+                              </p>
+                            );
+                          }
+                          return <div key={i} className="h-2" />;
+                        })}
+                      </div>
                     </div>
                   ) : (
-                    <div className="bg-red-100 text-red-700 p-4 rounded-xl max-w-[80%]">
-                      {message.content}
+                    <div className="flex justify-start">
+                      <div className="bg-red-50 text-red-700 p-4 rounded-2xl max-w-[80%] border border-red-100">
+                        {message.content}
+                      </div>
                     </div>
                   )}
                 </motion.div>
@@ -463,143 +498,157 @@ const ClinicalAssistant = () => {
           className="w-96 shrink-0"
         >
           <div className="bg-white/80 backdrop-blur-lg shadow-2xl rounded-3xl p-6 border border-white/20 sticky top-8">
-            <h2 className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 text-transparent bg-clip-text mb-6">
+            <h2 className="text-xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 text-transparent bg-clip-text mb-6">
               Patient Information
             </h2>
             
-            <div className="mb-6 border-b border-indigo-100 pb-6">
-              <div className="flex items-center gap-4">
-                {/* Patient Photo */}
-                <div className="relative">
-                  <div className="w-16 h-16 rounded-full bg-indigo-100 flex items-center justify-center overflow-hidden">
-                    {patientData.photo ? (
-                      <img 
-                        src={patientData.photo} 
-                        alt="Patient" 
-                        className="w-full h-full object-cover"
-                      />
+            <div className="space-y-6 max-h-[calc(100vh-300px)] overflow-y-auto pr-2 
+              scrollbar-thin scrollbar-thumb-indigo-300 scrollbar-track-transparent">
+              <div className="mb-6 border-b border-indigo-100 pb-6">
+                <div className="flex items-center gap-4">
+                  <div className="relative">
+                    <div className="w-16 h-16 rounded-full bg-indigo-100 flex items-center justify-center overflow-hidden">
+                      {patientData.photo ? (
+                        <img 
+                          src={patientData.photo} 
+                          alt="Patient" 
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold text-gray-900">
+                      {patientData.name || 'Patient Name'}
+                    </h3>
+                    <div className="flex items-center gap-3 text-sm text-gray-600">
+                      <span className="flex items-center gap-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
+                        </svg>
+                        ID: {patientData.id || 'Not assigned'}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        </svg>
+                        {patientData.age || 'Age not specified'}
+                      </span>
+                    </div>
+                    <div className="mt-1 flex items-center gap-2 text-sm">
+                      <span className={`px-2 py-1 rounded-full text-xs ${
+                        patientData.status === 'Active' 
+                          ? 'bg-green-100 text-green-800' 
+                          : 'bg-gray-100 text-gray-800'
+                      }`}>
+                        {patientData.status || 'Status unknown'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                <div className="bg-indigo-50 rounded-xl p-4">
+                  <h3 className="text-lg font-semibold text-indigo-700 mb-3 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Clinical Summary
+                  </h3>
+                  <div className="bg-indigo-50 rounded-xl p-4 space-y-2">
+                    {patientSummary ? (
+                      <p className="text-gray-700">{patientSummary}</p>
                     ) : (
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                      </svg>
+                      <p className="text-gray-500 italic">No clinical summary available</p>
                     )}
                   </div>
                 </div>
 
-                {/* Patient Details */}
-                <div className="flex-1">
-                  <h3 className="text-lg font-semibold text-gray-900">
-                    {patientData.name || 'Patient Name'}
+                <div className="bg-indigo-50 rounded-xl p-4">
+                  <h3 className="text-lg font-semibold text-indigo-700 mb-3 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
+                    Vital Signs
                   </h3>
-                  <div className="flex items-center gap-3 text-sm text-gray-600">
-                    <span className="flex items-center gap-1">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
-                      </svg>
-                      ID: {patientData.id || 'Not assigned'}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                      {patientData.age || 'Age not specified'}
-                    </span>
-                  </div>
-                  <div className="mt-1 flex items-center gap-2 text-sm">
-                    <span className={`px-2 py-1 rounded-full text-xs ${
-                      patientData.status === 'Active' 
-                        ? 'bg-green-100 text-green-800' 
-                        : 'bg-gray-100 text-gray-800'
-                    }`}>
-                      {patientData.status || 'Status unknown'}
-                    </span>
+                  <div className="bg-indigo-50 rounded-xl p-4 space-y-2">
+                    {patientData.vital_signs ? (
+                      <p className="text-gray-700">{patientData.vital_signs}</p>
+                    ) : (
+                      <p className="text-gray-500 italic">No vital signs recorded</p>
+                    )}
                   </div>
                 </div>
-              </div>
-            </div>
 
-            {/* Vitals Section */}
-            <div className="mb-6">
-              <h3 className="text-lg font-semibold text-indigo-700 mb-3 flex items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                </svg>
-                Vital Signs
-              </h3>
-              <div className="bg-indigo-50 rounded-xl p-4 space-y-2">
-                {patientData.vital_signs ? (
-                  <p className="text-gray-700">{patientData.vital_signs}</p>
-                ) : (
-                  <p className="text-gray-500 italic">No vital signs recorded</p>
-                )}
-              </div>
-            </div>
+                <div className="bg-indigo-50 rounded-xl p-4">
+                  <h3 className="text-lg font-semibold text-indigo-700 mb-3 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    Medical History
+                  </h3>
+                  <div className="bg-indigo-50 rounded-xl p-4 space-y-2">
+                    {patientData.medical_history ? (
+                      <p className="text-gray-700">{patientData.medical_history}</p>
+                    ) : (
+                      <p className="text-gray-500 italic">No medical history recorded</p>
+                    )}
+                  </div>
+                </div>
 
-            {/* Medical History Section */}
-            <div className="mb-6">
-              <h3 className="text-lg font-semibold text-indigo-700 mb-3 flex items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                Medical History
-              </h3>
-              <div className="bg-indigo-50 rounded-xl p-4 space-y-2">
-                {patientData.medical_history ? (
-                  <p className="text-gray-700">{patientData.medical_history}</p>
-                ) : (
-                  <p className="text-gray-500 italic">No medical history recorded</p>
-                )}
-              </div>
-            </div>
+                <div className="bg-indigo-50 rounded-xl p-4">
+                  <h3 className="text-lg font-semibold text-indigo-700 mb-3 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                    </svg>
+                    Current Medications
+                  </h3>
+                  <div className="bg-indigo-50 rounded-xl p-4 space-y-2">
+                    {patientData.current_medications ? (
+                      <p className="text-gray-700">{patientData.current_medications}</p>
+                    ) : (
+                      <p className="text-gray-500 italic">No medications recorded</p>
+                    )}
+                  </div>
+                </div>
 
-            {/* Current Medications */}
-            <div className="mb-6">
-              <h3 className="text-lg font-semibold text-indigo-700 mb-3 flex items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                </svg>
-                Current Medications
-              </h3>
-              <div className="bg-indigo-50 rounded-xl p-4 space-y-2">
-                {patientData.current_medications ? (
-                  <p className="text-gray-700">{patientData.current_medications}</p>
-                ) : (
-                  <p className="text-gray-500 italic">No medications recorded</p>
-                )}
-              </div>
-            </div>
+                <div className="bg-indigo-50 rounded-xl p-4">
+                  <h3 className="text-lg font-semibold text-indigo-700 mb-3 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                    Allergies
+                  </h3>
+                  <div className="bg-indigo-50 rounded-xl p-4 space-y-2">
+                    {patientData.allergies ? (
+                      <p className="text-gray-700">{patientData.allergies}</p>
+                    ) : (
+                      <p className="text-gray-500 italic">No allergies recorded</p>
+                    )}
+                  </div>
+                </div>
 
-            {/* Allergies */}
-            <div className="mb-6">
-              <h3 className="text-lg font-semibold text-indigo-700 mb-3 flex items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-                Allergies
-              </h3>
-              <div className="bg-indigo-50 rounded-xl p-4 space-y-2">
-                {patientData.allergies ? (
-                  <p className="text-gray-700">{patientData.allergies}</p>
-                ) : (
-                  <p className="text-gray-500 italic">No allergies recorded</p>
-                )}
-              </div>
-            </div>
-
-            {/* Lab Results */}
-            <div>
-              <h3 className="text-lg font-semibold text-indigo-700 mb-3 flex items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-                </svg>
-                Lab Results
-              </h3>
-              <div className="bg-indigo-50 rounded-xl p-4 space-y-2">
-                {patientData.lab_results ? (
-                  <p className="text-gray-700">{patientData.lab_results}</p>
-                ) : (
-                  <p className="text-gray-500 italic">No lab results recorded</p>
-                )}
+                <div className="bg-indigo-50 rounded-xl p-4">
+                  <h3 className="text-lg font-semibold text-indigo-700 mb-3 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+                    </svg>
+                    Lab Results
+                  </h3>
+                  <div className="bg-indigo-50 rounded-xl p-4 space-y-2">
+                    {patientData.lab_results ? (
+                      <p className="text-gray-700">{patientData.lab_results}</p>
+                    ) : (
+                      <p className="text-gray-500 italic">No lab results recorded</p>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           </div>

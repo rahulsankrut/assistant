@@ -29,6 +29,27 @@ app.add_middleware(
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 genai.configure(api_key=GOOGLE_API_KEY)
 
+# Add conversation history management
+conversation_contexts = {}
+
+class ConversationContext:
+    def __init__(self):
+        self.messages = []
+        self.clinical_findings = []
+        self.differential_diagnoses = []
+        
+    def add_message(self, content: str, role: str):
+        self.messages.append({"role": role, "content": content})
+        if len(self.messages) > 10:  # Keep last 10 messages
+            self.messages.pop(0)
+    
+    def get_context(self) -> dict:
+        return {
+            "clinical_findings": self.clinical_findings,
+            "differential_diagnoses": self.differential_diagnoses,
+            "recent_messages": self.messages[-3:] if self.messages else []  # Last 3 messages
+        }
+
 class Query(BaseModel):
     question: str
     patient_data: Dict[str, str] = {
@@ -52,51 +73,79 @@ def setup_gemini():
     """Initialize and return the Gemini model"""
     return genai.GenerativeModel('gemini-pro')
 
-def generate_prompt(query: Query) -> str:
-    """Generate a prompt for clinical decision support"""
-    prompt = """You are an AI medical assistant for healthcare professionals. 
-    Please provide a clear, structured clinical response using the following format:
+def generate_prompt(query: Query, context: dict) -> str:
+    """Generate a contextual prompt for clinical discussion"""
+    prompt = """You are an AI clinical assistant engaging in an ongoing medical dialogue. 
+Review the conversation history and continue our professional discussion.
 
-ASSESSMENT:
-- Brief summary of key findings and concerns
-
-ANALYSIS:
-- Detailed evaluation of symptoms and findings
-- Potential clinical implications
-
-RECOMMENDATIONS:
-- Key action items and next steps
-- Suggested tests or evaluations
-
-Please consider the following information:
-
-Patient Information:
+Patient Overview:
 """
     
     for key, value in query.patient_data.items():
         if value:
             prompt += f"- {key.replace('_', ' ').title()}: {value}\n"
+
+    if context["recent_messages"]:
+        prompt += "\nRecent Discussion:\n"
+        for msg in context["recent_messages"]:
+            prompt += f"{msg['role'].title()}: {msg['content']}\n"
     
     if query.symptoms:
         prompt += "\nReported Symptoms:\n"
         for symptom in query.symptoms:
             prompt += f"- {symptom}\n"
     
-    if query.clinical_findings:
-        prompt += "\nClinical Findings:\n"
-        for finding in query.clinical_findings:
+    if context["clinical_findings"]:
+        prompt += "\nEstablished Clinical Findings:\n"
+        for finding in context["clinical_findings"]:
             prompt += f"- {finding}\n"
 
-    prompt += f"\nCurrent Query: {query.question}\n"
+    prompt += f"\nCurrent Query: {query.question}\n\n"
+    
+    prompt += """Continue our discussion naturally, considering the conversation history.
+Maintain a professional yet conversational tone, as if we're colleagues discussing a case.
+Focus on addressing the current query while building on our previous discussion."""
     
     return prompt
 
-@app.post("/ask", response_model=Response)
-async def get_medical_information(query: Query):
-    """Process medical queries and return responses"""
+def generate_patient_summary(patient_data: Dict[str, str]) -> str:
+    """Generate a concise patient summary"""
+    prompt = """As a medical AI assistant, provide a very brief (2-3 sentences) clinical summary of this patient:
+
+Patient Information:
+"""
+    for key, value in patient_data.items():
+        if value:
+            prompt += f"- {key.replace('_', ' ').title()}: {value}\n"
+    
+    prompt += "\nProvide a concise, clinically relevant summary focusing on key findings and concerns."
+    
     try:
         model = setup_gemini()
-        prompt = generate_prompt(query)
+        response = model.generate_content(
+            prompt,
+            generation_config={
+                "temperature": 0.3,
+                "max_output_tokens": 150,
+            }
+        )
+        return response.text if response else "No summary available"
+    except Exception as e:
+        print("Error generating summary:", str(e))
+        return "Unable to generate summary"
+
+@app.post("/ask", response_model=Response)
+async def get_medical_information(query: Query):
+    """Process medical queries with conversation context"""
+    try:
+        # Get or create conversation context
+        context = conversation_contexts.get(query.conversation_id)
+        if not context:
+            context = ConversationContext()
+            conversation_contexts[query.conversation_id] = context
+        
+        model = setup_gemini()
+        prompt = generate_prompt(query, context.get_context())
         
         response = model.generate_content(
             prompt,
@@ -108,6 +157,10 @@ async def get_medical_information(query: Query):
         
         if not response or not response.text:
             raise HTTPException(status_code=500, detail="No response generated")
+        
+        # Update conversation context
+        context.add_message(query.question, "user")
+        context.add_message(response.text, "assistant")
             
         return Response(answer=response.text)
     
@@ -172,6 +225,19 @@ async def get_patient(patient_id: str):
 async def health_check():
     """Health check endpoint"""
     return {"status": "healthy"}
+
+@app.get("/patient-summary/{patient_id}")
+async def get_patient_summary(patient_id: str):
+    """Get a patient's summary"""
+    try:
+        patient = await db.patients.find_one({"id": patient_id})
+        if patient:
+            summary = generate_patient_summary(patient)
+            return {"summary": summary}
+        raise HTTPException(status_code=404, detail="Patient not found")
+    except Exception as e:
+        print("Error:", str(e))
+        raise HTTPException(status_code=500, detail="Error generating summary")
 
 if __name__ == "__main__":
     import uvicorn
