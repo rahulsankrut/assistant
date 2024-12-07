@@ -1,123 +1,172 @@
-import os
-from typing import Dict, List
-import google.generativeai as genai
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel
-import uvicorn
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from typing import Dict, List, Optional
+import google.generativeai as genai
+import os
+from dotenv import load_dotenv
+from motor.motor_asyncio import AsyncIOMotorClient
 
+load_dotenv()
 
-class Query(BaseModel):
-    question: str
-    medical_history: Dict[str, str] = {}
-    symptoms: List[str] = []
+app = FastAPI()
 
-class Response(BaseModel):
-    answer: str
-    disclaimer: str
-    follow_up_questions: List[str]
+# MongoDB setup
+MONGODB_URL = os.getenv("MONGODB_URL", "mongodb://localhost:27017")
+client = AsyncIOMotorClient(MONGODB_URL)
+db = client.medical_assistant
 
-app = FastAPI(title="Medical Assistant API")
-
+# CORS middleware configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # In production, replace with your frontend URL
+    allow_origins=["http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# Configure Google API
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+genai.configure(api_key=GOOGLE_API_KEY)
+
+class Query(BaseModel):
+    question: str
+    patient_data: Dict[str, str] = {
+        "age": "",
+        "gender": "",
+        "chief_complaint": "",
+        "vital_signs": "",
+        "medical_history": "",
+        "current_medications": "",
+        "allergies": "",
+        "lab_results": "",
+    }
+    clinical_findings: List[str] = []
+    symptoms: List[str] = []
+    conversation_id: Optional[str] = None
+
+class Response(BaseModel):
+    answer: str
 
 def setup_gemini():
-    """Initialize the Gemini API with safety settings"""
-    try:
-        genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-        
-        # Configure safety settings
-        safety_settings = [
-            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_MEDIUM_AND_ABOVE"},
-        ]
-        
-        model = genai.GenerativeModel('gemini-pro', safety_settings=safety_settings)
-        return model
-    except Exception as e:
-        raise Exception(f"Failed to initialize Gemini: {str(e)}")
+    """Initialize and return the Gemini model"""
+    return genai.GenerativeModel('gemini-pro')
 
 def generate_prompt(query: Query) -> str:
-    """Generate a structured prompt for the LLM"""
-    prompt = f"""You are a medical information assistant. Provide a clear, structured response with:
-1. A detailed answer to the medical query
-2. A clear medical disclaimer
-3. 2-3 relevant follow-up questions
+    """Generate a prompt for clinical decision support"""
+    prompt = """You are an AI medical assistant for healthcare professionals. 
+    Please provide a clear, structured clinical response using the following format:
 
-Question: {query.question}
+ASSESSMENT:
+- Brief summary of key findings and concerns
 
+ANALYSIS:
+- Detailed evaluation of symptoms and findings
+- Potential clinical implications
+
+RECOMMENDATIONS:
+- Key action items and next steps
+- Suggested tests or evaluations
+
+Please consider the following information:
+
+Patient Information:
 """
-    if query.medical_history:
-        prompt += "\nRelevant Medical History:\n"
-        for condition, details in query.medical_history.items():
-            prompt += f"- {condition}: {details}\n"
+    
+    for key, value in query.patient_data.items():
+        if value:
+            prompt += f"- {key.replace('_', ' ').title()}: {value}\n"
     
     if query.symptoms:
-        prompt += "\nCurrent Symptoms:\n"
+        prompt += "\nReported Symptoms:\n"
         for symptom in query.symptoms:
             prompt += f"- {symptom}\n"
-            
-    prompt += """\nResponse Format:
-Answer:
-[Detailed medical information]
+    
+    if query.clinical_findings:
+        prompt += "\nClinical Findings:\n"
+        for finding in query.clinical_findings:
+            prompt += f"- {finding}\n"
 
-Disclaimer:
-[Important medical disclaimer]
-
-Follow-up Questions:
-1. [Question 1]
-2. [Question 2]
-3. [Question 3]"""
+    prompt += f"\nCurrent Query: {query.question}\n"
     
     return prompt
 
 @app.post("/ask", response_model=Response)
 async def get_medical_information(query: Query):
-    """Process medical queries and return structured responses"""
+    """Process medical queries and return responses"""
     try:
         model = setup_gemini()
         prompt = generate_prompt(query)
         
-        response = model.generate_content(prompt)
+        response = model.generate_content(
+            prompt,
+            generation_config={
+                "temperature": 0.7,
+                "max_output_tokens": 1024,
+            }
+        )
         
-        # Default response structure
-        processed_response = {
-            "answer": response.text or "I couldn't generate a specific response.",
-            "disclaimer": "This is for informational purposes only. Always consult with healthcare professionals for medical advice.",
-            "follow_up_questions": []
-        }
-        
-        # Try to parse the response more explicitly
-        try:
-            # Split the response into sections
-            sections = response.text.split('\n\n')
+        if not response or not response.text:
+            raise HTTPException(status_code=500, detail="No response generated")
             
-            # Look for specific sections
-            for section in sections:
-                if section.lower().startswith('answer:'):
-                    processed_response['answer'] = section.replace('Answer:', '').strip()
-                elif section.lower().startswith('disclaimer:'):
-                    processed_response['disclaimer'] = section.replace('Disclaimer:', '').strip()
-                elif section.lower().startswith('follow-up questions:'):
-                    # Extract follow-up questions
-                    questions = [q.strip() for q in section.split('\n')[1:] if q.strip()]
-                    processed_response['follow_up_questions'] = questions
-        except Exception as parse_error:
-            print(f"Parsing error: {parse_error}")
-        
-        return Response(**processed_response)
+        return Response(answer=response.text)
     
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        print("Error processing request:", str(e))
+        raise HTTPException(status_code=500, detail="Service temporarily unavailable. Please try again.")
+
+@app.get("/patients")
+async def get_patients():
+    """Get all patients"""
+    try:
+        patients = await db.patients.find().to_list(1000)
+        for patient in patients:
+            patient["_id"] = str(patient["_id"])
+        return patients
+    except Exception as e:
+        print("MongoDB Error:", str(e))
+        # Fallback to sample data if DB fails
+        return [
+            {
+                "id": "1",
+                "name": "John Doe",
+                "age": "45",
+                "gender": "male",
+                "chief_complaint": "chest pain",
+                "vital_signs": "BP 120/80, HR 72",
+                "medical_history": "Hypertension",
+                "current_medications": "Lisinopril",
+                "allergies": "None",
+                "lab_results": "Normal CBC",
+                "status": "Active"
+            }
+        ]
+
+@app.get("/patients/{patient_id}")
+async def get_patient(patient_id: str):
+    """Get a specific patient"""
+    try:
+        patient = await db.patients.find_one({"id": patient_id})
+        if patient:
+            patient["_id"] = str(patient["_id"])
+            return patient
+        raise HTTPException(status_code=404, detail="Patient not found")
+    except Exception as e:
+        print("MongoDB Error:", str(e))
+        # Fallback to sample data if DB fails
+        return {
+            "id": patient_id,
+            "name": "John Doe",
+            "age": "45",
+            "gender": "male",
+            "chief_complaint": "chest pain",
+            "vital_signs": "BP 120/80, HR 72",
+            "medical_history": "Hypertension",
+            "current_medications": "Lisinopril",
+            "allergies": "None",
+            "lab_results": "Normal CBC",
+            "status": "Active"
+        }
 
 @app.get("/health")
 async def health_check():
@@ -125,4 +174,5 @@ async def health_check():
     return {"status": "healthy"}
 
 if __name__ == "__main__":
+    import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
