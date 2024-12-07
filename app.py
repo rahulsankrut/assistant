@@ -50,6 +50,11 @@ class ConversationContext:
             "recent_messages": self.messages[-3:] if self.messages else []  # Last 3 messages
         }
 
+class DoctorNotes(BaseModel):
+    physical_exam: str = ""
+    clinical_notes: str = ""
+    potential_diagnosis: str = ""
+
 class Query(BaseModel):
     question: str
     patient_data: Dict[str, str] = {
@@ -65,6 +70,7 @@ class Query(BaseModel):
     clinical_findings: List[str] = []
     symptoms: List[str] = []
     conversation_id: Optional[str] = None
+    doctor_notes: Optional[DoctorNotes] = None
 
 class Response(BaseModel):
     answer: str
@@ -84,6 +90,19 @@ Patient Overview:
     for key, value in query.patient_data.items():
         if value:
             prompt += f"- {key.replace('_', ' ').title()}: {value}\n"
+
+    if query.doctor_notes and (
+        query.doctor_notes.physical_exam or 
+        query.doctor_notes.clinical_notes or 
+        query.doctor_notes.potential_diagnosis
+    ):
+        prompt += "\nDoctor's Notes:\n"
+        if query.doctor_notes.physical_exam:
+            prompt += f"Physical Examination:\n{query.doctor_notes.physical_exam}\n"
+        if query.doctor_notes.clinical_notes:
+            prompt += f"Clinical Notes:\n{query.doctor_notes.clinical_notes}\n"
+        if query.doctor_notes.potential_diagnosis:
+            prompt += f"Potential Diagnosis:\n{query.doctor_notes.potential_diagnosis}\n"
 
     if context["recent_messages"]:
         prompt += "\nRecent Discussion:\n"

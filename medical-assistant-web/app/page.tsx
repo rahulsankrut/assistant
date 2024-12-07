@@ -10,6 +10,12 @@ interface Message {
   content: string;
 }
 
+interface DoctorNotes {
+  physicalExam: string;
+  clinicalNotes: string;
+  potentialDiagnosis: string;
+}
+
 const ClinicalAssistant = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
@@ -39,6 +45,11 @@ const ClinicalAssistant = () => {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [patientSummary, setPatientSummary] = useState<string>("");
+  const [doctorNotes, setDoctorNotes] = useState<DoctorNotes>({
+    physicalExam: '',
+    clinicalNotes: '',
+    potentialDiagnosis: ''
+  });
 
   useEffect(() => {
     let mounted = true;
@@ -107,7 +118,12 @@ const ClinicalAssistant = () => {
         },
         clinical_findings: clinicalFindings,
         symptoms: symptoms,
-        conversation_id: conversationId
+        conversation_id: conversationId,
+        doctor_notes: {
+          physical_exam: doctorNotes.physicalExam,
+          clinical_notes: doctorNotes.clinicalNotes,
+          potential_diagnosis: doctorNotes.potentialDiagnosis
+        }
       };
       
       const response = await fetch('http://localhost:8000/ask', {
@@ -388,76 +404,153 @@ const ClinicalAssistant = () => {
                   >
                     {symptom}
                     <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4 text-indigo-400 hover:text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12H9m12 0h-6m6 0h-6m-3-4h-6M4 16h16M4 12h16M4 8h16M3 4h18M4 20h16M4 18h16M5 14h14M6 10h12M7 6h10M8 2v2M7 20h10M14 18h2.343c.037.04.079.078.125.115l2.121 2.121a1 1 0 01.424.849V19a2 2 0 01-2 2h-1C9.716 21 8.5 20.732 7.462 20.268c-1.044.462-2.37.693-3.946.693C3.339 21 2 19.661 2 18c0-1.661 1.339-3 3-3h.256c.147.404.37.767.644 1.078l1.51 1.99M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                     </svg>
                   </motion.span>
                 ))}
               </motion.div>
             </div>
 
-            <div className="h-[500px] overflow-y-auto mb-6 space-y-4 p-6 
-              bg-gradient-to-r from-indigo-50 to-purple-50 rounded-2xl border border-indigo-100
-              scrollbar-thin scrollbar-thumb-indigo-300 scrollbar-track-transparent">
-              {messages.map((message, index) => (
-                <motion.div
-                  key={index}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="mb-6"
-                >
-                  {message.type === 'user' ? (
-                    <div className="flex justify-end">
-                      <div className="bg-indigo-600 text-white p-4 rounded-2xl rounded-tr-none max-w-[80%] shadow-md">
-                        {message.content}
-                      </div>
-                    </div>
-                  ) : message.type === 'assistant' ? (
-                    <div className="flex justify-start">
-                      <div className="bg-white p-6 rounded-2xl rounded-tl-none max-w-[80%] shadow-lg border border-gray-100">
-                        {message.content.split('\n').map((line, i) => {
-                          if (line.startsWith('##')) {
-                            return (
-                              <h2 key={i} className="text-lg font-bold text-gray-800 mt-4 mb-2">
-                                {line.replace(/^##\s*/, '')}
-                              </h2>
-                            );
-                          } else if (line.startsWith('#')) {
-                            return (
-                              <h3 key={i} className="text-md font-semibold text-gray-700 mt-3 mb-2">
-                                {line.replace(/^#\s*/, '')}
-                              </h3>
-                            );
-                          } else if (line.trim().startsWith('-')) {
-                            return (
-                              <div key={i} className="flex gap-2 ml-4 my-1">
-                                <span>•</span>
-                                <span className="text-gray-700">{line.replace(/^-\s*/, '')}</span>
-                              </div>
-                            );
-                          } else if (line.trim()) {
-                            return (
-                              <p key={i} className="text-gray-700 my-2">
-                                {line}
-                              </p>
-                            );
-                          }
-                          return <div key={i} className="h-2" />;
-                        })}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex justify-start">
-                      <div className="bg-red-50 text-red-700 p-4 rounded-2xl max-w-[80%] border border-red-100">
-                        {message.content}
-                      </div>
-                    </div>
-                  )}
-                </motion.div>
-              ))}
+            <div className="mb-6 bg-gradient-to-r from-indigo-50 to-purple-50 p-6 rounded-2xl border border-indigo-100 shadow-lg">
+              <h3 className="font-semibold mb-4 text-gray-700 flex items-center text-lg">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 mr-2 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Doctor's Notes
+              </h3>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Physical Examination</label>
+                  <textarea
+                    className="w-full px-4 py-3 rounded-xl border-2 border-indigo-100 
+                      focus:border-indigo-300 focus:ring focus:ring-indigo-200 
+                      focus:ring-opacity-50 transition-all duration-300
+                      text-gray-700 bg-white shadow-inner min-h-[100px]"
+                    value={doctorNotes.physicalExam}
+                    onChange={(e) => setDoctorNotes(prev => ({
+                      ...prev,
+                      physicalExam: e.target.value
+                    }))}
+                    placeholder="Enter physical examination findings..."
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Clinical Notes</label>
+                  <textarea
+                    className="w-full px-4 py-3 rounded-xl border-2 border-indigo-100 
+                      focus:border-indigo-300 focus:ring focus:ring-indigo-200 
+                      focus:ring-opacity-50 transition-all duration-300
+                      text-gray-700 bg-white shadow-inner min-h-[100px]"
+                    value={doctorNotes.clinicalNotes}
+                    onChange={(e) => setDoctorNotes(prev => ({
+                      ...prev,
+                      clinicalNotes: e.target.value
+                    }))}
+                    placeholder="Enter additional clinical notes..."
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Potential Diagnosis</label>
+                  <textarea
+                    className="w-full px-4 py-3 rounded-xl border-2 border-indigo-100 
+                      focus:border-indigo-300 focus:ring focus:ring-indigo-200 
+                      focus:ring-opacity-50 transition-all duration-300
+                      text-gray-700 bg-white shadow-inner"
+                    value={doctorNotes.potentialDiagnosis}
+                    onChange={(e) => setDoctorNotes(prev => ({
+                      ...prev,
+                      potentialDiagnosis: e.target.value
+                    }))}
+                    placeholder="Enter potential diagnoses..."
+                  />
+                </div>
+              </div>
             </div>
 
-            <div className="bg-gradient-to-r from-indigo-50 to-purple-50 p-4 rounded-2xl shadow-lg">
-              <div className="flex gap-3">
+            <div className="mb-6 bg-gradient-to-r from-indigo-50 to-purple-50 p-6 rounded-2xl border border-indigo-100 shadow-lg">
+              <h3 className="font-semibold mb-4 text-gray-700 flex items-center text-lg">
+                <svg 
+                  xmlns="http://www.w3.org/2000/svg" 
+                  className="h-6 w-6 mr-2 text-indigo-600" 
+                  fill="none" 
+                  viewBox="0 0 24 24" 
+                  stroke="currentColor"
+                >
+                  <path 
+                    strokeLinecap="round" 
+                    strokeLinejoin="round" 
+                    strokeWidth={2} 
+                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+                AI Medical Assistant Chat
+              </h3>
+
+              <div className="h-[500px] overflow-y-auto space-y-4 p-6 
+                bg-white rounded-2xl border border-indigo-100
+                scrollbar-thin scrollbar-thumb-indigo-300 scrollbar-track-transparent">
+                {messages.map((message, index) => (
+                  <motion.div
+                    key={index}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="mb-6"
+                  >
+                    {message.type === 'user' ? (
+                      <div className="flex justify-end">
+                        <div className="bg-indigo-600 text-white p-4 rounded-2xl rounded-tr-none max-w-[80%] shadow-md">
+                          {message.content}
+                        </div>
+                      </div>
+                    ) : message.type === 'assistant' ? (
+                      <div className="flex justify-start">
+                        <div className="bg-white p-6 rounded-2xl rounded-tl-none max-w-[80%] shadow-lg border border-gray-100">
+                          {message.content.split('\n').map((line, i) => {
+                            if (line.startsWith('##')) {
+                              return (
+                                <h2 key={i} className="text-lg font-bold text-gray-800 mt-4 mb-2">
+                                  {line.replace(/^##\s*/, '')}
+                                </h2>
+                              );
+                            } else if (line.startsWith('#')) {
+                              return (
+                                <h3 key={i} className="text-md font-semibold text-gray-700 mt-3 mb-2">
+                                  {line.replace(/^#\s*/, '')}
+                                </h3>
+                              );
+                            } else if (line.trim().startsWith('-')) {
+                              return (
+                                <div key={i} className="flex gap-2 ml-4 my-1">
+                                  <span>•</span>
+                                  <span className="text-gray-700">{line.replace(/^-\s*/, '')}</span>
+                                </div>
+                              );
+                            } else if (line.trim()) {
+                              return (
+                                <p key={i} className="text-gray-700 my-2">
+                                  {line}
+                                </p>
+                              );
+                            }
+                            return <div key={i} className="h-2" />;
+                          })}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex justify-start">
+                        <div className="bg-red-50 text-red-700 p-4 rounded-2xl max-w-[80%] border border-red-100">
+                          {message.content}
+                        </div>
+                      </div>
+                    )}
+                  </motion.div>
+                ))}
+              </div>
+
+              <div className="mt-4 flex gap-3">
                 <input
                   type="text"
                   placeholder="Type your medical question..."
