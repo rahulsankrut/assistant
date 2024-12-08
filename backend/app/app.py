@@ -91,7 +91,13 @@ def setup_gemini():
 def generate_prompt(query: Query, context: dict) -> str:
     """Generate a contextual prompt for clinical discussion"""
     prompt = """You are an AI clinical assistant engaging in an ongoing medical dialogue. 
-Review the conversation history and continue our professional discussion.
+Format your response in markdown using:
+- **Bold** for important terms and emphasis
+- *Italics* for medical terminology
+- ### For section headers
+- Bullet points for lists
+- > For important warnings or notes
+- Code blocks for measurements or lab values
 
 Patient Overview:
 """
@@ -132,7 +138,9 @@ Patient Overview:
     
     prompt += """Continue our discussion naturally, considering the conversation history.
 Maintain a professional yet conversational tone, as if we're colleagues discussing a case.
-Focus on addressing the current query while building on our previous discussion."""
+Focus on addressing the current query while building on our previous discussion.
+
+IMPORTANT: Format your entire response using markdown syntax for better readability."""
     
     return prompt
 
