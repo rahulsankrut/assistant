@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 import google.generativeai as genai
 import os
 from dotenv import load_dotenv
@@ -74,6 +74,11 @@ class Query(BaseModel):
 
 class Response(BaseModel):
     answer: str
+
+class DiagnosisAnalysisRequest(BaseModel):
+    diagnosis: str
+    symptoms: List[str]
+    patient_data: Dict[str, Any]
 
 def setup_gemini():
     """Initialize and return the Gemini model"""
@@ -257,6 +262,124 @@ async def get_patient_summary(patient_id: str):
     except Exception as e:
         print("Error:", str(e))
         raise HTTPException(status_code=500, detail="Error generating summary")
+
+@app.post("/predict-diseases")
+async def predict_diseases(data: dict):
+    try:
+        model = setup_gemini()
+        
+        prompt = f"""As an AI medical assistant, analyze the following patient information and provide a structured assessment of potential diseases and their likelihood. Consider both the symptoms and medical history carefully.
+
+Patient Information:
+Age: {data.get('age', 'Not specified')}
+Gender: {data.get('gender', 'Not specified')}
+Current Symptoms: {', '.join(data.get('symptoms', []))}
+Medical History: {data.get('medical_history', 'None provided')}
+Vital Signs: {data.get('vital_signs', 'Not available')}
+Current Medications: {data.get('current_medications', 'None listed')}
+
+Please provide:
+1. Top potential diagnoses (most likely conditions based on the information provided)
+2. Likelihood assessment for each (High/Medium/Low)
+3. Key supporting factors for each diagnosis
+4. Recommended additional tests or examinations
+
+Note: This is an AI-generated assessment and should not replace professional medical diagnosis."""
+
+        response = model.generate_content(
+            prompt,
+            generation_config={
+                "temperature": 0.3,
+                "max_output_tokens": 1024,
+            }
+        )
+        
+        return {"prediction": response.text}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/analyze-diagnosis")
+async def analyze_diagnosis(request: DiagnosisAnalysisRequest):
+    try:
+        model = setup_gemini()
+        
+        # Clean and validate the diagnosis string
+        diagnosis = request.diagnosis.strip()
+        if not diagnosis:
+            raise HTTPException(status_code=400, detail="Diagnosis cannot be empty")
+        
+        prompt = f"""As an AI medical assistant, provide a detailed analysis of why {diagnosis} is being considered as a potential diagnosis for this patient.
+
+Patient Information:
+- Age: {request.patient_data.get('age', 'Not specified')}
+- Gender: {request.patient_data.get('gender', 'Not specified')}
+- Current Symptoms: {', '.join(request.symptoms)}
+- Medical History: {request.patient_data.get('medical_history', 'None')}
+- Current Medications: {request.patient_data.get('current_medications', 'None')}
+- Vital Signs: {request.patient_data.get('vital_signs', 'None')}
+
+Provide your analysis in markdown format using the following structure:
+
+## Symptom Correlation
+[Explain how the patient's symptoms align with {diagnosis}]
+
+## Patient Profile & Risk Factors
+[Discuss how the patient's age, gender, and other characteristics relate to this diagnosis]
+
+## Key Clinical Indicators
+[List and explain the main clinical findings that support this diagnosis]
+
+## Concerning Features
+[Highlight any red flags or features requiring immediate attention]
+
+## Differential Diagnoses
+[List other conditions to consider and why they should be ruled out]
+
+## Medical History Relevance
+[Explain how the patient's medical history impacts this diagnosis]
+
+## Recommendations
+[Suggest next steps, tests, or monitoring required]
+
+Use markdown formatting:
+- Use bullet points where appropriate
+- Use **bold** for emphasis
+- Use *italics* for medical terms
+- Use > for important notes or warnings
+- Use ### for subsections if needed"""
+
+        try:
+            response = model.generate_content(
+                prompt,
+                generation_config={
+                    "temperature": 0.3,
+                    "max_output_tokens": 1024,
+                }
+            )
+            
+            if not response or not response.text:
+                raise HTTPException(
+                    status_code=500,
+                    detail="No response generated from the AI model"
+                )
+            
+            return {"analysis": response.text}
+            
+        except Exception as model_error:
+            print(f"Gemini API Error: {str(model_error)}")
+            raise HTTPException(
+                status_code=500,
+                detail="Error generating analysis from AI model"
+            )
+            
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        print(f"Unexpected error: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="An unexpected error occurred while analyzing the diagnosis"
+        )
 
 if __name__ == "__main__":
     import uvicorn
