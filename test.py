@@ -1,7 +1,5 @@
 # Remove the comments to test if the API key is working
 
-
-
 import google.generativeai as genai
 
 genai.configure(api_key="AIzaSyDv-LEWvPW3vuIhwdG52XxOD8VOotLhSbE")
