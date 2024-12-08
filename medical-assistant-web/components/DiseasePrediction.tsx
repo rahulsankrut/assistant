@@ -16,6 +16,7 @@ const DiseasePrediction: React.FC<DiseasePredictionProps> = ({ patientData, symp
   const [selectedDiagnosis, setSelectedDiagnosis] = useState<string | null>(null);
   const [diagnosisAnalysis, setDiagnosisAnalysis] = useState<string>('');
   const [isAnalysisLoading, setIsAnalysisLoading] = useState(false);
+  const [expandedLikelihoods, setExpandedLikelihoods] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     setPrediction('');
@@ -23,6 +24,7 @@ const DiseasePrediction: React.FC<DiseasePredictionProps> = ({ patientData, symp
     setCheckedRecommendations(new Set());
     setSelectedDiagnosis(null);
     setDiagnosisAnalysis('');
+    setExpandedLikelihoods(new Set());
   }, [patientData.id, symptoms.join(',')]);
 
   const getPrediction = async () => {
@@ -184,12 +186,12 @@ const DiseasePrediction: React.FC<DiseasePredictionProps> = ({ patientData, symp
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
               </svg>
-              Potential Diagnoses
+              Top 5 Potential Diagnoses
             </h3>
             <div className="space-y-4">
               {/* Diagnosis List */}
               <div className="space-y-2">
-                {formatPredictionSection(prediction).diagnoses.map((diagnosis, index) => (
+                {formatPredictionSection(prediction).diagnoses.slice(0, 5).map((diagnosis, index) => (
                   <div 
                     key={index} 
                     className="flex items-start gap-3 p-3 rounded-lg bg-indigo-50 cursor-pointer hover:bg-indigo-100 transition-colors"
@@ -315,122 +317,125 @@ const DiseasePrediction: React.FC<DiseasePredictionProps> = ({ patientData, symp
                 const isHigh = likelihoodLevel.includes('high');
                 const isMedium = likelihoodLevel.includes('medium') || likelihoodLevel.includes('moderate');
                 const isLow = likelihoodLevel.includes('low');
-                
-                const getLikelihoodColor = () => {
-                  if (isHigh) return 'bg-red-50 border-red-200';
-                  if (isMedium) return 'bg-yellow-50 border-yellow-200';
-                  if (isLow) return 'bg-green-50 border-green-200';
-                  return 'bg-gray-50 border-gray-200';
-                };
-
-                const getLikelihoodIndicator = () => {
-                  if (isHigh) {
-                    return (
-                      <div className="flex items-center gap-1">
-                        <div className="w-2 h-6 rounded-full bg-red-400"></div>
-                        <div className="w-2 h-4 rounded-full bg-red-300"></div>
-                        <div className="w-2 h-2 rounded-full bg-red-200"></div>
-                      </div>
-                    );
-                  }
-                  if (isMedium) {
-                    return (
-                      <div className="flex items-center gap-1">
-                        <div className="w-2 h-5 rounded-full bg-yellow-400"></div>
-                        <div className="w-2 h-3 rounded-full bg-yellow-300"></div>
-                      </div>
-                    );
-                  }
-                  if (isLow) {
-                    return (
-                      <div className="flex items-center gap-1">
-                        <div className="w-2 h-3 rounded-full bg-green-400"></div>
-                      </div>
-                    );
-                  }
-                  return null;
-                };
+                const isExpanded = expandedLikelihoods.has(index);
+                const supportingFactors = formatPredictionSection(prediction).supportingFactors[index];
 
                 return (
                   <div 
                     key={index} 
-                    className={`p-4 rounded-lg border ${getLikelihoodColor()} transition-all duration-300`}
+                    className={`rounded-lg border ${
+                      isHigh ? 'bg-red-50 border-red-200' :
+                      isMedium ? 'bg-yellow-50 border-yellow-200' :
+                      isLow ? 'bg-green-50 border-green-200' :
+                      'bg-gray-50 border-gray-200'
+                    } transition-all duration-300`}
                   >
-                    <div className="flex items-start gap-3">
-                      <div className="mt-1">{getLikelihoodIndicator()}</div>
-                      <div className="flex-1">
-                        <ReactMarkdown
-                          className="text-gray-700"
-                          components={{
-                            p: ({node, ...props}) => (
-                              <span className="block">{props.children}</span>
-                            ),
-                            strong: ({node, ...props}) => (
-                              <strong className={`font-semibold ${
-                                isHigh ? 'text-red-700' :
-                                isMedium ? 'text-yellow-700' :
-                                isLow ? 'text-green-700' :
-                                'text-gray-700'
-                              }`} {...props} />
-                            ),
-                            em: ({node, ...props}) => (
-                              <em className={`${
-                                isHigh ? 'text-red-600' :
-                                isMedium ? 'text-yellow-600' :
-                                isLow ? 'text-green-600' :
-                                'text-gray-600'
-                              }`} {...props} />
-                            ),
-                            ul: ({node, ...props}) => (
-                              <ul className="list-disc pl-6 my-2" {...props} />
-                            ),
-                            li: ({node, ...props}) => (
-                              <li className="text-gray-700 my-1" {...props} />
-                            ),
-                          }}
+                    <button 
+                      className="w-full p-4 text-left"
+                      onClick={() => {
+                        setExpandedLikelihoods(prev => {
+                          const newSet = new Set(prev);
+                          if (newSet.has(index)) {
+                            newSet.delete(index);
+                          } else {
+                            newSet.add(index);
+                          }
+                          return newSet;
+                        });
+                      }}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="mt-1">
+                          {isHigh && (
+                            <div className="flex items-center gap-1">
+                              <div className="w-2 h-6 rounded-full bg-red-400"></div>
+                              <div className="w-2 h-4 rounded-full bg-red-300"></div>
+                              <div className="w-2 h-2 rounded-full bg-red-200"></div>
+                            </div>
+                          )}
+                          {isMedium && (
+                            <div className="flex items-center gap-1">
+                              <div className="w-2 h-5 rounded-full bg-yellow-400"></div>
+                              <div className="w-2 h-3 rounded-full bg-yellow-300"></div>
+                            </div>
+                          )}
+                          {isLow && (
+                            <div className="flex items-center gap-1">
+                              <div className="w-2 h-3 rounded-full bg-green-400"></div>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1">
+                          <ReactMarkdown
+                            className="text-gray-700"
+                            components={{
+                              p: ({node, ...props}) => (
+                                <span className="block">{props.children}</span>
+                              ),
+                              strong: ({node, ...props}) => (
+                                <strong className={`font-semibold ${
+                                  isHigh ? 'text-red-700' :
+                                  isMedium ? 'text-yellow-700' :
+                                  isLow ? 'text-green-700' :
+                                  'text-gray-700'
+                                }`} {...props} />
+                              ),
+                              em: ({node, ...props}) => (
+                                <em className={`${
+                                  isHigh ? 'text-red-600' :
+                                  isMedium ? 'text-yellow-600' :
+                                  isLow ? 'text-green-600' :
+                                  'text-gray-600'
+                                }`} {...props} />
+                              ),
+                            }}
+                          >
+                            {likelihood}
+                          </ReactMarkdown>
+                        </div>
+                        <div 
+                          className="flex-shrink-0 text-gray-400 transition-transform duration-200"
+                          style={{ transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)' }}
                         >
-                          {likelihood}
-                        </ReactMarkdown>
+                          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </div>
                       </div>
-                    </div>
+                    </button>
+
+                    {/* Supporting Factors */}
+                    {isExpanded && supportingFactors && (
+                      <div className="px-4 pb-4">
+                        <div className="border-t border-gray-200 pt-3 space-y-2">
+                          <h4 className="text-sm font-medium text-gray-600 mb-2">Supporting Factors:</h4>
+                          <div className="prose prose-indigo max-w-none">
+                            <ReactMarkdown
+                              className="text-gray-700"
+                              components={{
+                                p: ({node, ...props}) => (
+                                  <div className="flex items-start gap-2 py-1">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 mt-2 shrink-0"></span>
+                                    <span>{props.children}</span>
+                                  </div>
+                                ),
+                                strong: ({node, ...props}) => (
+                                  <strong className="font-semibold text-indigo-900" {...props} />
+                                ),
+                                em: ({node, ...props}) => (
+                                  <em className="text-indigo-800" {...props} />
+                                ),
+                              }}
+                            >
+                              {supportingFactors}
+                            </ReactMarkdown>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
-            </div>
-          </div>
-
-          {/* Supporting Factors */}
-          <div className="bg-white rounded-xl p-6 shadow-md border border-indigo-100">
-            <h3 className="text-lg font-semibold text-indigo-700 mb-4 flex items-center gap-2">
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-              </svg>
-              Supporting Factors
-            </h3>
-            <div className="space-y-2">
-              {formatPredictionSection(prediction).supportingFactors.map((factor, index) => (
-                <div key={index} className="prose prose-indigo max-w-none">
-                  <ReactMarkdown
-                    className="text-gray-700"
-                    components={{
-                      p: ({node, ...props}) => (
-                        <div className="flex items-start gap-2 p-2">
-                          <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 mt-2 shrink-0"></span>
-                          <span>{props.children}</span>
-                        </div>
-                      ),
-                      strong: ({node, ...props}) => (
-                        <strong className="font-semibold text-indigo-900" {...props} />
-                      ),
-                      em: ({node, ...props}) => (
-                        <em className="text-indigo-800" {...props} />
-                      ),
-                    }}
-                  >
-                    {factor}
-                  </ReactMarkdown>
-                </div>
-              ))}
             </div>
           </div>
 
