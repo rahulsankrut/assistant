@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import { patientService } from '../services/patientService';
 import { Patient } from '../types/patient';
 import DiseasePrediction from '../components/DiseasePrediction';
+import MedicalResearch from '../components/MedicalResearch';
 
 interface Message {
   type: 'user' | 'assistant' | 'error';
@@ -53,7 +54,7 @@ const ClinicalAssistant = () => {
   });
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSection, setRecordingSection] = useState<'symptoms' | 'physicalExam' | 'clinicalNotes' | null>(null);
-  const [activeTab, setActiveTab] = useState<'chat' | 'prediction'>('chat');
+  const [activeTab, setActiveTab] = useState<'chat' | 'prediction' | 'research'>('chat');
 
   useEffect(() => {
     let mounted = true;
@@ -483,6 +484,16 @@ const ClinicalAssistant = () => {
               >
                 Disease Prediction
               </button>
+              <button
+                onClick={() => setActiveTab('research')}
+                className={`px-6 py-3 rounded-xl transition-all duration-300 font-medium
+                  ${activeTab === 'research'
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-white text-gray-600 hover:bg-indigo-50'
+                  }`}
+              >
+                Research
+              </button>
             </div>
 
             {activeTab === 'chat' ? (
@@ -722,12 +733,14 @@ const ClinicalAssistant = () => {
                   </div>
                 </div>
               </>
-            ) : (
+            ) : activeTab === 'prediction' ? (
               <DiseasePrediction 
                 key={selectedPatient?.id || 'no-patient'}
                 patientData={patientData}
                 symptoms={symptoms}
               />
+            ) : (
+              <MedicalResearch />
             )}
           </motion.div>
         </div>
