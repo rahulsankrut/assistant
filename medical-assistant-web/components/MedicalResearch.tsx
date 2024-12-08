@@ -9,6 +9,13 @@ interface ResearchPaper {
   authors: string;
   snippet: string;
   citations: string;
+  abstract?: string;
+  journal?: string;
+  year?: string;
+  doi?: string;
+  keywords?: string[];
+  methodology?: string;
+  conclusions?: string;
 }
 
 interface SearchResult {
@@ -27,6 +34,7 @@ const MedicalResearch = () => {
   const [chatMessages, setChatMessages] = useState<Array<{ role: 'user' | 'assistant', content: string }>>([]);
   const [chatInput, setChatInput] = useState('');
   const [isChatLoading, setIsChatLoading] = useState(false);
+  const [selectedPaper, setSelectedPaper] = useState<ResearchPaper | null>(null);
 
   const handleSearch = async (page: number = 0) => {
     if (!searchQuery.trim()) return;
@@ -88,6 +96,11 @@ const MedicalResearch = () => {
     } finally {
       setIsChatLoading(false);
     }
+  };
+
+  const handlePaperClick = (paper: ResearchPaper, e: React.MouseEvent) => {
+    e.preventDefault();
+    setSelectedPaper(paper);
   };
 
   return (
@@ -180,16 +193,12 @@ const MedicalResearch = () => {
                       initial={{ opacity: 0, y: 20 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: index * 0.1 }}
-                      className="bg-white p-6 rounded-xl shadow-md hover:shadow-lg transition-shadow duration-300"
+                      className="bg-white p-6 rounded-xl shadow-md hover:shadow-lg transition-shadow duration-300 cursor-pointer"
+                      onClick={(e) => handlePaperClick(paper, e)}
                     >
-                      <a
-                        href={paper.link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-lg font-semibold text-indigo-600 hover:text-indigo-800 transition-colors duration-300"
-                      >
+                      <h3 className="text-lg font-semibold text-indigo-600 hover:text-indigo-800 transition-colors duration-300">
                         {paper.title}
-                      </a>
+                      </h3>
                       <p className="text-sm text-gray-600 mt-2">{paper.authors}</p>
                       <p className="text-gray-700 mt-2">{paper.snippet}</p>
                       <p className="text-sm text-gray-500 mt-2">{paper.citations}</p>
@@ -293,6 +302,127 @@ const MedicalResearch = () => {
           </Tab.Panel>
         </Tab.Panels>
       </Tab.Group>
+
+      <AnimatePresence>
+        {selectedPaper && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+            onClick={() => setSelectedPaper(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-xl p-6 max-w-4xl w-full max-h-[80vh] overflow-y-auto"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex justify-between items-start mb-4">
+                <h2 className="text-xl font-semibold text-gray-800">{selectedPaper.title}</h2>
+                <button
+                  onClick={() => setSelectedPaper(null)}
+                  className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              <div className="space-y-6">
+                <div className="bg-gray-50 p-4 rounded-lg">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <h3 className="text-sm font-semibold text-gray-600">Authors</h3>
+                      <p className="text-gray-800">{selectedPaper.authors}</p>
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-semibold text-gray-600">Citations</h3>
+                      <p className="text-gray-800">{selectedPaper.citations}</p>
+                    </div>
+                    {selectedPaper.journal && (
+                      <div>
+                        <h3 className="text-sm font-semibold text-gray-600">Journal</h3>
+                        <p className="text-gray-800">{selectedPaper.journal}</p>
+                      </div>
+                    )}
+                    {selectedPaper.year && (
+                      <div>
+                        <h3 className="text-sm font-semibold text-gray-600">Year</h3>
+                        <p className="text-gray-800">{selectedPaper.year}</p>
+                      </div>
+                    )}
+                    {selectedPaper.doi && (
+                      <div>
+                        <h3 className="text-sm font-semibold text-gray-600">DOI</h3>
+                        <p className="text-gray-800">{selectedPaper.doi}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {selectedPaper.keywords && (
+                  <div>
+                    <h3 className="text-md font-semibold text-gray-800 mb-2">Keywords</h3>
+                    <div className="flex flex-wrap gap-2">
+                      {selectedPaper.keywords.map((keyword, index) => (
+                        <span
+                          key={index}
+                          className="px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full text-sm"
+                        >
+                          {keyword}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {selectedPaper.abstract && (
+                  <div>
+                    <h3 className="text-md font-semibold text-gray-800 mb-2">Abstract</h3>
+                    <p className="text-gray-700 leading-relaxed">{selectedPaper.abstract}</p>
+                  </div>
+                )}
+
+                {selectedPaper.methodology && (
+                  <div>
+                    <h3 className="text-md font-semibold text-gray-800 mb-2">Methodology</h3>
+                    <p className="text-gray-700 leading-relaxed">{selectedPaper.methodology}</p>
+                  </div>
+                )}
+
+                {selectedPaper.conclusions && (
+                  <div>
+                    <h3 className="text-md font-semibold text-gray-800 mb-2">Conclusions</h3>
+                    <p className="text-gray-700 leading-relaxed">{selectedPaper.conclusions}</p>
+                  </div>
+                )}
+
+                <div>
+                  <h3 className="text-md font-semibold text-gray-800 mb-2">Quick Summary</h3>
+                  <p className="text-gray-700 leading-relaxed">{selectedPaper.snippet}</p>
+                </div>
+
+                <div className="border-t pt-4 mt-4">
+                  <a
+                    href={selectedPaper.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                  >
+                    <span>View Full Paper</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
+                  </a>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
