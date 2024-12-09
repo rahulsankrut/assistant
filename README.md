@@ -121,10 +121,6 @@ We welcome contributions to improve the AI Medical Assistant! Please follow thes
 5. Push to the branch (`git push origin feature/NewFeature`)
 6. Open a Pull Request
 
-## License
-
-This project is licensed under the MIT License - see the `LICENSE` file for details.
-
 ## Contact
 
 Rahul Kasanagottu  
