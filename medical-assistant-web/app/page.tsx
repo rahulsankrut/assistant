@@ -6,6 +6,7 @@ import { patientService } from '../services/patientService';
 import { Patient } from '../types/patient';
 import DiseasePrediction from '../components/DiseasePrediction';
 import MedicalResearch from '../components/MedicalResearch';
+import ReactMarkdown from 'react-markdown';
 
 interface Message {
   type: 'user' | 'assistant' | 'error';
@@ -659,35 +660,45 @@ const ClinicalAssistant = () => {
                         ) : message.type === 'assistant' ? (
                           <div className="flex justify-start">
                             <div className="bg-white p-6 rounded-2xl rounded-tl-none max-w-[80%] shadow-lg border border-gray-100">
-                              {message.content.split('\n').map((line, i) => {
-                                if (line.startsWith('##')) {
-                                  return (
-                                    <h2 key={i} className="text-lg font-bold text-gray-800 mt-4 mb-2">
-                                      {line.replace(/^##\s*/, '')}
-                                    </h2>
-                                  );
-                                } else if (line.startsWith('#')) {
-                                  return (
-                                    <h3 key={i} className="text-md font-semibold text-gray-700 mt-3 mb-2">
-                                      {line.replace(/^#\s*/, '')}
-                                    </h3>
-                                  );
-                                } else if (line.trim().startsWith('-')) {
-                                  return (
-                                    <div key={i} className="flex gap-2 ml-4 my-1">
-                                      <span>•</span>
-                                      <span className="text-gray-700">{line.replace(/^-\s*/, '')}</span>
+                              <ReactMarkdown
+                                className="prose prose-indigo max-w-none space-y-4"
+                                components={{
+                                  h3: ({node, ...props}) => (
+                                    <h3 className="text-lg font-bold text-indigo-800 border-b border-indigo-100 pb-2 mb-3" {...props} />
+                                  ),
+                                  h4: ({node, ...props}) => (
+                                    <h4 className="text-md font-semibold text-indigo-700 mt-4 mb-2" {...props} />
+                                  ),
+                                  p: ({node, ...props}) => (
+                                    <p className="text-gray-700 leading-relaxed" {...props} />
+                                  ),
+                                  ul: ({node, ...props}) => (
+                                    <ul className="space-y-2 my-3" {...props} />
+                                  ),
+                                  li: ({node, ...props}) => (
+                                    <li className="flex items-start gap-2">
+                                      <span className="text-indigo-500 mt-1.5">•</span>
+                                      <span className="text-gray-700">{props.children}</span>
+                                    </li>
+                                  ),
+                                  blockquote: ({node, children, ...props}) => (
+                                    <div className="bg-amber-50 border-l-4 border-amber-400 p-4 my-4 rounded-r-lg">
+                                      <p className="text-amber-800 font-medium">{children}</p>
                                     </div>
-                                  );
-                                } else if (line.trim()) {
-                                  return (
-                                    <p key={i} className="text-gray-700 my-2">
-                                      {line}
-                                    </p>
-                                  );
-                                }
-                                return <div key={i} className="h-2" />;
-                              })}
+                                  ),
+                                  em: ({node, ...props}) => (
+                                    <em className="text-indigo-700 not-italic font-medium" {...props} />
+                                  ),
+                                  strong: ({node, ...props}) => (
+                                    <strong className="text-gray-900 font-semibold" {...props} />
+                                  ),
+                                  code: ({node, ...props}) => (
+                                    <code className="px-1.5 py-0.5 bg-gray-100 text-gray-900 rounded text-sm" {...props} />
+                                  )
+                                }}
+                              >
+                                {message.content}
+                              </ReactMarkdown>
                             </div>
                           </div>
                         ) : (
