@@ -1,0 +1,13 @@
+# macOS system files
+.DS_Store
+
+# Environment files
+.env
+backend/app/.env
+
+# Python cache files
+backend/app/routers/__pycache__/
+
+# Node.js lock files
+medical-assistant-web/package-lock.json
+
